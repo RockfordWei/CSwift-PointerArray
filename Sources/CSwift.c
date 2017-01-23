@@ -47,12 +47,3 @@ int selfTest(char * buf) {
   modIter(m, buf);
   return 0;
 }
-
-int main(void) {
-  char * buf = malloc(16384);
-  memset(buf, 0, 16384);
-  int r = selfTest(buf);
-  printf("%s\n", buf);
-  free(buf);
-  return r;
-}

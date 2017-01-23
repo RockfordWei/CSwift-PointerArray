@@ -1,5 +1,6 @@
 import XCTest
 @testable import CSwift
+import CoreFoundation
 
 class CSwiftTests: XCTestCase {
     func testExample() {
