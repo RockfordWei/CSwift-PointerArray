@@ -2,6 +2,31 @@ import XCTest
 @testable import CSwift
 import CoreFoundation
 
+extension Array {
+  mutating public func withUnsafeNullTerminatedPointers<R>(_ body: (UnsafeMutablePointer<UnsafeMutablePointer<Element>?>) throws -> R) rethrows -> R {
+
+  var pArray = self.map { value -> UnsafeMutablePointer<Element>? in
+    var pValue = value
+    let p = UnsafeMutablePointer<Element>.allocate(capacity: 1)
+    memcpy(p, UnsafeMutablePointer(mutating: &pValue), MemoryLayout<Element>.size)
+    return p
+  }//end map
+
+  pArray.append(UnsafeMutablePointer<Element>(bitPattern: 0))
+
+  let result = try body(UnsafeMutablePointer(mutating: pArray))
+
+  pArray.forEach { pointer in
+    guard let p = pointer else {
+      return
+    }//end p
+    p.deallocate(capacity: 1)
+  }//end
+  return result
+  }//func
+}//end array
+
+
 class CSwiftTests: XCTestCase {
     func testExample() {
       let buffer = UnsafeMutablePointer<Int8>.allocate(capacity: 8192)
@@ -12,42 +37,30 @@ class CSwiftTests: XCTestCase {
       let sa = String(cString: buffer)
       print(sa)
 
-      var b1 = berval(bv_len: 5, bv_val: strdup("12345"))
-      var b2 = berval(bv_len: 6, bv_val: strdup("123456"))
-      var b3 = berval(bv_len: 4, bv_val: strdup("abcd"))
-      var b4 = berval(bv_len: 3, bv_val: strdup("ABC"))
-      let bx = UnsafeMutablePointer<UnsafeMutablePointer<berval>?>.allocate(capacity: 3)
-      bx.advanced(by: 0).pointee = withUnsafeMutablePointer(to: &b1) { $0 }
-      bx.advanced(by: 1).pointee = withUnsafeMutablePointer(to: &b2) { $0 }
-      bx.advanced(by: 2).pointee = UnsafeMutablePointer<berval>(bitPattern: 0)
+      let b1 = berval(bv_len: 5, bv_val: strdup("12345"))
+      let b2 = berval(bv_len: 6, bv_val: strdup("123456"))
 
-      let by = UnsafeMutablePointer<UnsafeMutablePointer<berval>?>.allocate(capacity: 3)
-      by.advanced(by: 0).pointee = withUnsafeMutablePointer(to: &b3) { $0 }
-      by.advanced(by: 1).pointee = withUnsafeMutablePointer(to: &b4) { $0 }
-      by.advanced(by: 2).pointee = UnsafeMutablePointer<berval>(bitPattern: 0)
-
-      var m0 = LDAPMod(mod_op: 1, mod_type: strdup("hello"), modv_bvals: bx)
-      var m1 = LDAPMod(mod_op: 2, mod_type: strdup("world"), modv_bvals: by)
-      let m = UnsafeMutablePointer<UnsafeMutablePointer<LDAPMod>?>.allocate(capacity: 3)
-      m.advanced(by: 0).pointee = withUnsafeMutablePointer(to: &m0) { $0 }
-      m.advanced(by: 1).pointee = withUnsafeMutablePointer(to: &m1) { $0 }
-      m.advanced(by: 2).pointee = UnsafeMutablePointer<LDAPMod>(bitPattern: 0)
+      var bx = [b1, b2]
 
       memset(buffer, 0, 8192)
-      modIter(m, buffer)
-      let sb = String(cString: buffer)
-      print(sb)
+
+      let sb = bx.withUnsafeNullTerminatedPointers { pbx -> String in
+        let b3 = berval(bv_len: 4, bv_val: strdup("abcd"))
+        let b4 = berval(bv_len: 3, bv_val: strdup("ABC"))
+        var by = [b3, b4]
+        return by.withUnsafeNullTerminatedPointers { pby -> String in
+          let m0 = LDAPMod(mod_op: 1, mod_type: strdup("hello"), modv_bvals: pbx)
+          let m1 = LDAPMod(mod_op: 2, mod_type: strdup("world"), modv_bvals: pby)
+          var m = [m0, m1]
+          return m.withUnsafeNullTerminatedPointers { mptr -> String in
+            modIter(mptr, buffer)
+            return String(cString: buffer)
+          }
+        }
+      }
 
       buffer.deallocate(capacity: 8192)
-      free(m0.mod_type)
-      free(m1.mod_type)
-      m.deallocate(capacity:3)
-      free(b1.bv_val)
-      free(b2.bv_val)
-      free(b3.bv_val)
-      free(b4.bv_val)
-      bx.deallocate(capacity: 3)
-      by.deallocate(capacity: 3)
+      print(sb)
       XCTAssertEqual(sa, sb)
     }
 
