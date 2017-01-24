@@ -5,27 +5,30 @@ import CoreFoundation
 extension Array {
   public func withUnsafeNullTerminatedPointers<R>(_ body: (UnsafeMutablePointer<UnsafeMutablePointer<Element>?>) throws -> R) rethrows -> R {
 
-  var pArray = self.map { value -> UnsafeMutablePointer<Element>? in
-    var pValue = value
-    let p = UnsafeMutablePointer<Element>.allocate(capacity: 1)
-    memcpy(p, UnsafeMutablePointer(mutating: &pValue), MemoryLayout<Element>.size)
-    return p
-  }//end map
+    var pArray = self.map { value -> UnsafeMutablePointer<Element>? in
+      let p = UnsafeMutablePointer<Element>.allocate(capacity: 1)
+      p.initialize(to: value)
+      return p
+    }//end map
 
-  pArray.append(UnsafeMutablePointer<Element>(bitPattern: 0))
+    pArray.append(UnsafeMutablePointer<Element>(bitPattern: 0))
 
-  let result = try body(UnsafeMutablePointer(mutating: pArray))
+    let pointers = UnsafeMutablePointer<UnsafeMutablePointer<Element>?>.allocate(capacity: self.count + 1)
+    pointers.initialize(from: pArray)
+    let result = try body(pointers)
 
-  pArray.forEach { pointer in
-    guard let p = pointer else {
-      return
-    }//end p
-    p.deallocate(capacity: 1)
-  }//end
-  return result
+    pArray.forEach { pointer in
+      guard let p = pointer else {
+        return
+      }//end p
+      p.deinitialize()
+      p.deallocate(capacity: 1)
+    }//end
+    pointers.deinitialize()
+    pointers.deallocate(capacity: self.count + 1)
+    return result
   }//func
 }//end array
-
 
 class CSwiftTests: XCTestCase {
     func testExample() {
